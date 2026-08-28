@@ -1,8 +1,0 @@
-Fill my ONE Brain from ./docs
-
-Load every file with document_chunk_upsert (source_id = path relative to ./docs).
-Write one condensed summary per document type with knowledge_upsert. Then propose
-15 questions my team would realistically ask, check each with knowledge_search,
-and show me which ones the brain answers and which it misses.
-
-Work through it without asking me anything.

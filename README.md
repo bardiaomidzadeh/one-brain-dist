@@ -75,12 +75,19 @@ To check a server without changing it, add `--preflight-only`.
 
 ### 3. Set up your own machine
 
-The installer ends by printing a block you paste into a **terminal** on your own
-computer, in whatever folder you want to work in. It connects that folder to your
-brain, creates `docs/`, and writes a `CLAUDE.md` so every future session knows how
-to use it.
+The installer ends with two commands. On your own computer, in whatever folder
+you want to work in:
 
-Then you put documents in `docs/`, open Claude Code there, and type:
+```bash
+scp root@YOUR-DOMAIN:/opt/onebrain/onebrain-connect.sh .
+bash onebrain-connect.sh
+```
+
+That connects the folder to your brain, creates `docs/`, and writes a `CLAUDE.md`
+so every future session there knows how to use it. Delete the script afterwards —
+it holds your key.
+
+Then put documents in `docs/`, open Claude Code there, and type:
 
 ```
 Fill my ONE Brain from ./docs
@@ -91,7 +98,6 @@ would ask — then tests each one and tells you which the brain answers and whic
 it misses. That last list is the honest measure of whether this is working.
 
 Details, and how to replace a key: [`CONNECT.md`](CONNECT.md).
-
 ## Updating
 
 ```bash

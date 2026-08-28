@@ -10,43 +10,46 @@ page is the copy you can come back to.
 
 ## Setting up a workspace
 
-The installer prints one block. You paste it into a **terminal** on your own
-machine, in whatever folder you want to work in. It does three things:
+On your own machine, in whatever folder you want to work in:
 
-1. connects that machine to your brain (`claude mcp add`)
-2. creates a `docs/` folder
-3. writes a `CLAUDE.md` so every future session knows how to use the brain
+```bash
+scp root@YOUR-DOMAIN:/opt/onebrain/onebrain-connect.sh .
+bash onebrain-connect.sh
+```
 
-That block carries your key. It belongs in a terminal and nowhere else.
+That connects the folder to your brain, creates `docs/`, and writes a
+`CLAUDE.md` so every future session in that folder knows how to use it.
 
-### Why setup is a command and not a prompt
+The script holds your key. Delete it once it has run, and do not commit it.
 
-The obvious design is to let the assistant do it: paste one block into Claude
-and let it connect itself. We tried that. A careful Claude Code refused it —
-twice — and it was right to.
+### Why the key is in a file and not on screen
 
-A bearer token arriving as pasted text, next to instructions to connect to a URL
-and read local files, is indistinguishable from a prompt-injection attack. There
-is no wording that fixes this, and there should not be: an assistant that happily
-connected to whatever a pasted message told it to would be a worse assistant.
+The installer used to print the setup block. Three times in a row, someone
+pasted it into a chat instead of a terminal — the third time with "do not paste
+this into a chat" written directly above it.
 
-So configuration is a command, and the assistant gets the work. That is the same
-split the server side uses: `install.sh` provisions, the model reasons.
+A warning label is not a fix. Anyone who sees a block of text on screen selects
+it and pastes it where they are working. So nothing secret is printed any more.
+What is not shown cannot be handed on by accident.
+
+The assistant refusing those pastes was right, every time. A bearer token
+arriving as pasted text, next to instructions to connect somewhere and read
+local files, is indistinguishable from an attack. An assistant that went along
+with it would be a worse assistant.
 
 ## Filling the brain
 
-Put documents in `docs/`, start Claude Code in that folder, and type the short
-request from [`connect-prompt.txt`](connect-prompt.txt):
+Put documents in `docs/`, start Claude Code in that folder, and type:
 
 ```
 Fill my ONE Brain from ./docs
 ```
 
-It runs through without asking you anything: loads each file, writes one summary
-per document type, proposes fifteen questions your team would ask, and tests each
-one — telling you which the brain answers and which it misses.
+The `CLAUDE.md` the setup script wrote tells it the rest: your slug, the tool
+conventions, and the two rules — never invent a source, never report success
+without having seen it.
 
-No secret, no configuration. Just the job.
+No key, no configuration in the chat. Just the job.
 ## What the key can and cannot do
 
 The key the installer gives you has the role `user`. It can read and write

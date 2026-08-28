@@ -165,7 +165,7 @@ test("das Release enthaelt, was der Kunde zum Loslegen braucht", () => {
   // und bewiese nichts.
   const { dir, tree } = release();
   try {
-    for (const f of ["README.md", "CONNECT.md", "connect-prompt.txt",
+    for (const f of ["README.md", "CONNECT.md",
                      "install.sh", "smoke-test.sh", "verify-knowledge.sh",
                      "docker-compose.yml", "Caddyfile", "scripts/api-call.sh",
                      "workspace-template.md"]) {
@@ -176,46 +176,54 @@ test("das Release enthaelt, was der Kunde zum Loslegen braucht", () => {
   }
 });
 
-test("der Installer liest den Prompt, der mitgeliefert wird", () => {
-  // install.sh liest connect-prompt.txt zur LAUFZEIT ein. Fehlte die Datei im
-  // Release, druckte der Installer beim Kunden eine leere Stelle — genau dort,
-  // wo steht, was als naechstes zu tun ist. Beide Haelften werden im selben
-  // Baum geprueft, damit sie nicht auseinanderlaufen koennen.
+test("die Vorlage fuer die CLAUDE.md ist vollstaendig und ohne Geheimnis", () => {
+  // workspace-template.md wird vom Installer in onebrain-connect.sh
+  // eingesetzt und landet als CLAUDE.md im Ordner des Kunden. Sie ist das,
+  // was jede kuenftige Sitzung dort ueber das Brain weiss.
+  const { dir, tree } = release();
+  try {
+    const tpl = readFileSync(path.join(tree, "workspace-template.md"), "utf8");
+    for (const platzhalter of ["__COMPANY__", "__DOMAIN__", "__SLUG__"]) {
+      assert.ok(tpl.includes(platzhalter), `${platzhalter} fehlt in der Vorlage`);
+    }
+    assert.doesNotMatch(tpl, /ob_live_/, "in der Vorlage darf kein Schluessel stehen");
+
+    const sh = readFileSync(path.join(tree, "install.sh"), "utf8");
+    assert.match(sh, /workspace-template\.md/,
+      "install.sh setzt die Vorlage nicht mehr ein — dann bekaeme der Kunde keine CLAUDE.md");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+test("der Installer druckt keinen Schluessel auf den Schirm", () => {
+  // Dreimal hintereinander hat jemand den Einrichtungsblock in einen Chat
+  // kopiert — beim dritten Mal stand woertlich darueber "nicht in einen Chat
+  // einfuegen". Ein Warnhinweis ist keine Loesung: wer einen Block sieht,
+  // markiert ihn und fuegt ihn dort ein, wo er gerade arbeitet.
+  //
+  // Deshalb steht der Schluessel in einer Datei mit Rechten 600 und nirgends
+  // in der Ausgabe. Dieser Test haelt das fest — sonst wandert er beim
+  // naechsten Umbau der Schlussmeldung wieder auf den Schirm.
   const { dir, tree } = release();
   try {
     const sh = readFileSync(path.join(tree, "install.sh"), "utf8");
-    assert.match(sh, /connect-prompt\.txt/, "install.sh liest den Prompt nicht mehr ein");
 
-    const prompt = readFileSync(path.join(tree, "connect-prompt.txt"), "utf8");
-    assert.ok(prompt.length > 200, "der Prompt ist verdaechtig kurz");
+    // Der Block, der am Ende auf dem Schirm landet.
+    const m = new RegExp("cat <<EOF\\n([\\s\\S]*?)\\nEOF").exec(sh);
+    assert.ok(m, "Schlussblock in install.sh nicht gefunden — Test anpassen");
+    const gedruckt = m[1];
 
-    // Der Prompt geht in einen Chat. Ein Schluessel darf dort nie hineingeraten
-    // — deshalb der getrennte Shell-Befehl fuer den Token.
-    assert.doesNotMatch(prompt, /ob_live_/, "im Prompt darf kein Schluessel stehen");
+    assert.doesNotMatch(gedruckt, /LAPTOP_TOKEN/,
+      "der Schluessel wird gedruckt. Er gehoert in onebrain-connect.sh, nicht auf den Schirm.");
+    assert.doesNotMatch(gedruckt, /Bearer/,
+      "im Schlussblock steht ein Authorization-Header — der gehoert in die Datei.");
 
-    // Und er muss KURZ bleiben.
-    //
-    // Die erste Fassung war eine nummerierte Liste ueber 28 Zeilen. Ein
-    // Claude-Code auf dem Rechner des Kunden hat sie als Prompt-Injection
-    // eingestuft und die Ausfuehrung verweigert — zu Recht: ein Wall von
-    // Anweisungen, der als Dokument ankommt und einem Assistenten sagt, er
-    // solle lokale Dateien an eine URL schicken, sieht genau so aus wie ein
-    // Angriff. Kurz und in der Ich-Form gelesen es sich als das, was es ist:
-    // die Bitte des Nutzers.
-    assert.ok(prompt.length < 1200,
-      "der Prompt ist zu lang — lange Anweisungslisten werden als Injection " +
-      "eingestuft und abgelehnt. Kurz halten, erste Person.");
-
-    // Der Ordner steht fest: das Einrichtungskommando legt docs/ an. Damit
-    // muss der Assistent nichts erfragen und liest nichts ausserhalb.
-    assert.match(prompt, /\.\/docs/, "der Prompt nennt den Ordner nicht");
-
-    // Und er richtet nichts ein. Konfiguration gehoert in das Kommando aus
-    // Schritt 1 — ein Prompt, der ein `claude mcp add` mit Schluessel
-    // enthaelt, wird von einem sorgfaeltigen Client abgelehnt, und das zu
-    // Recht. Zweimal beim Kunden passiert.
-    assert.doesNotMatch(prompt, /mcp add/, "der Prompt darf nichts einrichten");
-    assert.doesNotMatch(prompt, /Bearer/, "im Prompt darf kein Token stehen");
+    // Gegenprobe: der Block muss ueberhaupt etwas Sinnvolles enthalten,
+    // sonst bestuenden die beiden Pruefungen auch bei einer leeren Ausgabe.
+    // Gegenprobe mit einem String, der WIRKLICH im Block steht: der Dateiname
+    // kommt ueber ${SETUP_HINT} hinein, steht also nicht woertlich dort.
+    assert.match(gedruckt, /Arbeitsplatz einrichten/,
+      "der Schlussblock sieht leer aus — dann bewiesen die Pruefungen oben nichts");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -517,28 +517,64 @@ TABLES=$(docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t
 
 ENDPOINT="https://${DOMAIN}/mcp"
 
-# Der Arbeitsplatz wird von einem Befehl eingerichtet, nicht von einem Modell.
+# Der Schluessel wird NICHT gedruckt.
 #
-# Erste Fassung liess den Agenten das `claude mcp add` selbst ausfuehren, mit
-# dem Schluessel im eingefuegten Text. Ein Claude Code beim Kunden hat das
-# zweimal verweigert — zu Recht: ein Bearer-Token, das in einem Chat ankommt,
-# zusammen mit der Aufforderung, sich zu verbinden und lokale Dateien zu lesen,
-# ist nicht von einem Angriff zu unterscheiden. Das laesst sich nicht
-# umformulieren, und man sollte es auch nicht.
+# Dreimal hintereinander hat jemand den Einrichtungsblock in einen Chat
+# kopiert — beim dritten Mal stand woertlich darueber "nicht in einen Chat
+# einfuegen". Ein Warnhinweis ist keine Loesung. Wer einen mehrzeiligen Block
+# auf dem Schirm sieht, markiert ihn und fuegt ihn dort ein, wo er gerade
+# arbeitet.
 #
-# Also dieselbe Trennung wie ueberall sonst hier: Einrichten ist Ausfuehrung
-# und gehoert in ein Kommando. Der Prompt danach enthaelt kein Geheimnis und
-# keine Konfiguration — nur den Auftrag.
+# Also steht nichts Geheimes mehr auf dem Schirm. Der Schluessel geht in eine
+# Datei mit Rechten 600, und der Kunde bekommt zwei kurze Zeilen, die
+# unverwechselbar nach Kommandos aussehen. Was nicht angezeigt wird, kann
+# nicht versehentlich weitergegeben werden.
 if [ -n "$LAPTOP_TOKEN" ]; then
-  SETUP_BLOCK="claude mcp add --transport http onebrain ${ENDPOINT} \\
-  --header \"Authorization: Bearer ${LAPTOP_TOKEN}\" --scope user
+  umask 177
+  cat > onebrain-connect.sh <<CONNECT
+#!/usr/bin/env bash
+#
+# ONE Brain — richtet diesen Ordner ein.
+#
+# Enthaelt einen Zugangsschluessel. Nicht weitergeben, nicht in einen Chat
+# einfuegen, nicht einchecken. Nach dem Lauf kann die Datei geloescht werden.
+
+set -euo pipefail
+
+command -v claude >/dev/null 2>&1 || {
+  echo "Claude Code ist nicht installiert. Ohne es gibt es nichts zu verbinden." >&2
+  exit 1
+}
+
+claude mcp remove onebrain >/dev/null 2>&1 || true
+claude mcp add --transport http onebrain ${ENDPOINT} \\
+  --header "Authorization: Bearer ${LAPTOP_TOKEN}" --scope user
+
 mkdir -p docs
-cat > CLAUDE.md <<'ONEBRAIN'
-$(sed -e "s/__COMPANY__/${COMPANY}/g" -e "s/__DOMAIN__/${DOMAIN}/g" -e "s/__SLUG__/${SLUG}/g" workspace-template.md)
-ONEBRAIN"
+
+if [ -e CLAUDE.md ]; then
+  echo "CLAUDE.md gibt es schon — nicht ueberschrieben."
+  echo "Was hineingehoert, steht in CONNECT.md."
 else
-  SETUP_BLOCK="# Der Arbeitsplatz-Schluessel besteht bereits und wird nicht erneut
-# angezeigt. Einen neuen anlegen: siehe CONNECT.md."
+  cat > CLAUDE.md <<'ONEBRAIN_MD'
+$(sed -e "s/__COMPANY__/${COMPANY}/g" -e "s/__DOMAIN__/${DOMAIN}/g" -e "s/__SLUG__/${SLUG}/g" workspace-template.md)
+ONEBRAIN_MD
+fi
+
+echo
+echo "Fertig. Dieser Ordner ist mit ${COMPANY} verbunden."
+echo "Dokumente nach docs/ legen, Claude Code hier starten und eingeben:"
+echo
+echo "    Fill my ONE Brain from ./docs"
+echo
+CONNECT
+  umask 022
+  chmod 600 onebrain-connect.sh
+  SETUP_HINT="   scp root@${DOMAIN}:/opt/onebrain/onebrain-connect.sh .
+   bash onebrain-connect.sh"
+else
+  SETUP_HINT="   Der Arbeitsplatz-Schluessel besteht bereits. Einen neuen anlegen
+   und onebrain-connect.sh neu erzeugen: siehe CONNECT.md."
 fi
 
 cat <<EOF
@@ -553,24 +589,19 @@ cat <<EOF
 
  ── 1. Arbeitsplatz einrichten ──────────────────────────────
 
-   Auf deinem eigenen Rechner: in den Ordner wechseln, in dem du
-   arbeiten willst, und das Folgende ins TERMINAL einfuegen.
-   Nicht in einen Chat — es enthaelt deinen Schluessel.
+   Auf deinem eigenen Rechner, im Ordner, in dem du arbeiten willst:
 
-${SETUP_BLOCK}
+${SETUP_HINT}
 
-   Das verbindet den Ordner mit deinem Brain, legt docs/ an und
-   schreibt eine CLAUDE.md, damit jede kuenftige Sitzung weiss,
-   wie sie damit umgeht. Der Schluessel wird genau einmal
-   angezeigt — ersetzen statt wiederherstellen, siehe CONNECT.md.
+   Das Skript verbindet den Ordner, legt docs/ an und schreibt eine
+   CLAUDE.md. Danach kann es geloescht werden — es enthaelt deinen
+   Schluessel. Er steht absichtlich nirgends auf diesem Schirm.
 
  ── 2. Das Brain fuellen ────────────────────────────────────
 
-   Dokumente nach docs/ legen, dann Claude Code in dem Ordner
-   starten und das hier eingeben. Kein Geheimnis, keine
-   Einrichtung — nur der Auftrag:
+   Dokumente nach docs/ legen, Claude Code dort starten, eingeben:
 
-$(sed "s/^/   /" connect-prompt.txt)
+       Fill my ONE Brain from ./docs
 
  ── Hinweise ────────────────────────────────────────────────
 

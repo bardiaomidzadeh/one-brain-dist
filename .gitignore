@@ -9,3 +9,4 @@ __gate_probe.tmp
 gold-questions.json
 SETUP-NOTES.md
 agent/.transcript.jsonl
+onebrain-connect.sh
