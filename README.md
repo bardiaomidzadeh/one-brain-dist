@@ -30,9 +30,43 @@ the server — deliberately.
 
 ## Install
 
-Three steps on the server, then one on your own machine.
+Two ways. Pick the one that matches who is doing it.
 
-### 1. Get the code
+### The short way: drive it from your own machine
+
+You never log into the server or type a command on it. You open one SSH session
+by hand, and everything else runs from your own computer.
+
+```bash
+scripts/open-session.sh root@brain.acme.de        # asks for the password, once
+
+scripts/remote-install.sh root@brain.acme.de \
+  --company "Acme GmbH" --slug acme \
+  --domain brain.acme.de --acme-email ops@acme.de
+```
+
+That uploads the release, installs it, brings back the connect script and runs
+it — so when it finishes, your folder is already connected to your brain.
+
+The password is typed once, into your own terminal. What stays behind is an
+authenticated socket, not a credential: it expires after eight hours, it belongs
+to that one machine, and it can be handed to a tool or an assistant without ever
+handing over the password itself.
+
+Close it when you are done:
+
+```bash
+scripts/open-session.sh root@brain.acme.de --close
+```
+
+**On Windows, run these in Git Bash, not PowerShell.** Windows ships an OpenSSH
+that cannot share sessions; the one in Git for Windows can.
+
+### The long way: on the server itself
+
+If you would rather work on the machine directly.
+
+#### 1. Get the code
 
 You were invited to a private repository. Log in from the server — the code
 appears in your terminal, you approve it in the browser on your own laptop.
@@ -44,23 +78,7 @@ gh auth login          # GitHub.com -> HTTPS -> Login with a web browser
 sudo gh repo clone <org>/one-brain-dist /opt/onebrain
 cd /opt/onebrain
 ```
-
-Ubuntu ships `gh` in `universe`: 2.45 on 24.04, 2.4 on 22.04. The 22.04 build is
-from 2021 and still logs in fine, but if it gives you trouble, install the
-current one from GitHub instead:
-
-```bash
-(type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
-  && sudo mkdir -p -m 755 /etc/apt/keyrings \
-  && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-  && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
-  && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-    | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-  && sudo apt update && sudo apt install gh -y
-```
-
-### 2. Install
+#### 2. Install
 
 ```bash
 sudo ./install.sh --company "Acme GmbH" --slug acme \
@@ -73,7 +91,7 @@ and live nowhere else.
 
 To check a server without changing it, add `--preflight-only`.
 
-### 3. Set up your own machine
+#### 3. Set up your own machine
 
 The installer ends with two commands for your own computer. Run them in
 whatever folder you want to work in.

@@ -41,6 +41,8 @@ const AUSFUEHRBAR = [
   "scripts/dns-probe.sh",
   "scripts/knowledge-types.sh",
   "scripts/publish-release.sh",
+  "scripts/open-session.sh",
+  "scripts/remote-install.sh",
   "agent/e2e.sh",
 ];
 
