@@ -145,10 +145,49 @@ fi
 # Gefragt wird eng: laeuft in DIESEM Verzeichnis ein caddy-Container aus
 # DIESEM Compose-Projekt. Nicht "irgendwo laeuft Docker" — sonst wuerde jeder
 # fremde Webserver auf einer Box mit Docker durchgewinkt.
+# Zusaetzlich: aus WELCHEM Verzeichnis laeuft diese Anlage.
+#
+# docker-compose.yml setzt "name: onebrain" fest. Der Projektname haengt also
+# NICHT am Verzeichnis: ein zweiter Klon unter /opt/onebrain2 steuert dieselben
+# Container und dieselben Volumes. Ein install.sh von dort faende keine .env,
+# erzeugte ein NEUES Postgres-Passwort, baute den db-Container damit neu — und
+# das alte Datenvolumen behielte das alte Passwort. Postgres setzt es nur beim
+# ersten Anlegen. Die laufende Anlage koennte sich danach nicht mehr an ihrer
+# eigenen Datenbank anmelden.
+#
+# Deshalb: laeuft die Anlage aus einem anderen Verzeichnis, wird hier gestoppt.
+# Ist das Label nicht lesbar (aeltere Compose-Fassung), gilt die Anlage als
+# unsere — lieber das bisherige Verhalten als ein Update, das faelschlich
+# abbricht.
+caddy_working_dir() {
+  local cid
+  cid="$(docker compose ps --status running -q caddy 2>/dev/null | head -1)"
+  [ -n "$cid" ] || return 1
+  docker inspect -f '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' \
+    "$cid" 2>/dev/null
+}
+
 own_caddy_running() {
   command -v docker >/dev/null 2>&1 || return 1
   docker compose version >/dev/null 2>&1 || return 1
-  [ -n "$(docker compose ps --status running -q caddy 2>/dev/null)" ]
+  [ -n "$(docker compose ps --status running -q caddy 2>/dev/null)" ] || return 1
+
+  local wd
+  wd="$(caddy_working_dir || true)"
+  if [ -n "$wd" ] && [ "$wd" != "$HERE" ]; then
+    die "ONE Brain laeuft bereits — aber aus $wd, nicht aus $HERE" \
+        "Der Projektname steht in docker-compose.yml fest (onebrain). Beide
+Verzeichnisse steuern deshalb dieselben Container und dieselben Datenvolumen.
+Von hier aus zu installieren wuerde ein neues Datenbank-Passwort erzeugen und
+die laufende Anlage von ihren eigenen Daten aussperren.
+
+Zum Aktualisieren in das Verzeichnis wechseln, in dem sie laeuft:
+    cd ${wd} && git pull && sudo ./install.sh <dieselben Argumente>
+
+Fuer eine wirklich zweite, unabhaengige Anlage braucht es eine eigene Box:
+eine Domain, ein Zertifikat und die Ports 80/443 gibt es je Maschine nur einmal."
+  fi
+  return 0
 }
 
 PORTS_BUSY=""
