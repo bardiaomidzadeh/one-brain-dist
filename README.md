@@ -75,18 +75,26 @@ To check a server without changing it, add `--preflight-only`.
 
 ### 3. Set up your own machine
 
-The installer ends with two commands. On your own computer, in whatever folder
-you want to work in:
+The installer ends with two commands for your own computer. Run them in
+whatever folder you want to work in.
+
+**Linux or macOS:**
 
 ```bash
 scp root@YOUR-DOMAIN:/opt/onebrain/onebrain-connect.sh .
 bash onebrain-connect.sh
 ```
 
+**Windows (PowerShell):**
+
+```powershell
+scp root@YOUR-DOMAIN:/opt/onebrain/onebrain-connect.ps1 .
+.\onebrain-connect.ps1
+```
+
 That connects the folder to your brain, creates `docs/`, and writes a `CLAUDE.md`
 so every future session there knows how to use it. Delete the script afterwards —
 it holds your key.
-
 Then put documents in `docs/`, open Claude Code there, and type:
 
 ```

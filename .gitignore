@@ -10,3 +10,4 @@ gold-questions.json
 SETUP-NOTES.md
 agent/.transcript.jsonl
 onebrain-connect.sh
+onebrain-connect.ps1

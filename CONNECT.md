@@ -10,18 +10,26 @@ page is the copy you can come back to.
 
 ## Setting up a workspace
 
-On your own machine, in whatever folder you want to work in:
+On your own machine, in whatever folder you want to work in.
+
+**Linux or macOS:**
 
 ```bash
 scp root@YOUR-DOMAIN:/opt/onebrain/onebrain-connect.sh .
 bash onebrain-connect.sh
 ```
 
-That connects the folder to your brain, creates `docs/`, and writes a
+**Windows (PowerShell):**
+
+```powershell
+scp root@YOUR-DOMAIN:/opt/onebrain/onebrain-connect.ps1 .
+.\onebrain-connect.ps1
+```
+
+Either one connects the folder to your brain, creates `docs/`, and writes a
 `CLAUDE.md` so every future session in that folder knows how to use it.
 
 The script holds your key. Delete it once it has run, and do not commit it.
-
 ### Why the key is in a file and not on screen
 
 The installer used to print the setup block. Three times in a row, someone

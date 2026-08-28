@@ -228,3 +228,29 @@ test("der Installer druckt keinen Schluessel auf den Schirm", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("der Installer liefert beide Einrichtungswege", () => {
+  // Beim ersten Durchspielen endete die Kette auf einem Windows-Rechner: scp
+  // lief, das Skript lag da, und `bash` gab es in der PowerShell nicht. Ein
+  // KMU-Kunde im DACH-Raum sitzt sehr wahrscheinlich vor Windows — eine
+  // Anleitung, die nur auf zwei von drei Systemen funktioniert, ist keine.
+  const { dir, tree } = release();
+  try {
+    const sh = readFileSync(path.join(tree, "install.sh"), "utf8");
+    assert.match(sh, /onebrain-connect\.sh/, "der Unix-Weg fehlt");
+    assert.match(sh, /onebrain-connect\.ps1/, "der Windows-Weg fehlt");
+
+    // Im PowerShell-Teil darf keine Bash-Zeilenfortsetzung stehen: PowerShell
+    // kennt sie nicht und bricht die Zeile falsch um. Genau daran ist die
+    // erste Fassung gescheitert.
+    const ps = sh.slice(sh.indexOf("CONNECTPS"), sh.lastIndexOf("CONNECTPS"));
+    assert.ok(ps.length > 200, "PowerShell-Block nicht gefunden — Test anpassen");
+    const forts = new RegExp("claude mcp add[^\\n]*\\\\$", "m");
+    assert.doesNotMatch(ps, forts, "Bash-Zeilenfortsetzung im PowerShell-Skript");
+
+    // Und beide Wege muessen dem Kunden auch genannt werden.
+    assert.match(sh, /Windows \(PowerShell\)/, "der Windows-Weg wird nicht angezeigt");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

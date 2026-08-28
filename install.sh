@@ -570,8 +570,60 @@ echo
 CONNECT
   umask 022
   chmod 600 onebrain-connect.sh
-  SETUP_HINT="   scp root@${DOMAIN}:/opt/onebrain/onebrain-connect.sh .
-   bash onebrain-connect.sh"
+  # Und dieselbe Einrichtung fuer Windows.
+  #
+  # Ein KMU-Kunde im DACH-Raum sitzt sehr wahrscheinlich vor Windows, und dort
+  # gibt es in der PowerShell kein `bash`. Beim ersten Durchgang endete genau
+  # dort die Kette: scp lief, das Skript lag da, und der naechste Befehl
+  # existierte nicht. Eine Anleitung, die nur auf zwei von drei Systemen
+  # funktioniert, ist keine.
+  umask 177
+  cat > onebrain-connect.ps1 <<CONNECTPS
+# ONE Brain - richtet diesen Ordner ein.
+#
+# Enthaelt einen Zugangsschluessel. Nicht weitergeben, nicht in einen Chat
+# einfuegen, nicht einchecken. Nach dem Lauf kann die Datei geloescht werden.
+#
+# Aufruf:  .\\onebrain-connect.ps1
+
+\$ErrorActionPreference = "Stop"
+
+if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
+  Write-Error "Claude Code ist nicht installiert. Ohne es gibt es nichts zu verbinden."
+  exit 1
+}
+
+claude mcp remove onebrain 2>\$null | Out-Null
+claude mcp add --transport http onebrain ${ENDPOINT} --header "Authorization: Bearer ${LAPTOP_TOKEN}" --scope user
+
+New-Item -ItemType Directory -Force -Path docs | Out-Null
+
+if (Test-Path CLAUDE.md) {
+  Write-Host "CLAUDE.md gibt es schon - nicht ueberschrieben."
+  Write-Host "Was hineingehoert, steht in CONNECT.md."
+} else {
+  \$md = @'
+$(sed -e "s/__COMPANY__/${COMPANY}/g" -e "s/__DOMAIN__/${DOMAIN}/g" -e "s/__SLUG__/${SLUG}/g" workspace-template.md)
+'@
+  [System.IO.File]::WriteAllText((Join-Path \$PWD "CLAUDE.md"), \$md)
+}
+
+Write-Host ""
+Write-Host "Fertig. Dieser Ordner ist mit ${COMPANY} verbunden."
+Write-Host "Dokumente nach docs/ legen, Claude Code hier starten und eingeben:"
+Write-Host ""
+Write-Host "    Fill my ONE Brain from ./docs"
+Write-Host ""
+CONNECTPS
+  umask 022
+  chmod 600 onebrain-connect.ps1
+  SETUP_HINT="   Linux oder macOS:
+     scp root@${DOMAIN}:/opt/onebrain/onebrain-connect.sh .
+     bash onebrain-connect.sh
+
+   Windows (PowerShell):
+     scp root@${DOMAIN}:/opt/onebrain/onebrain-connect.ps1 .
+     .\\onebrain-connect.ps1"
 else
   SETUP_HINT="   Der Arbeitsplatz-Schluessel besteht bereits. Einen neuen anlegen
    und onebrain-connect.sh neu erzeugen: siehe CONNECT.md."
