@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+node_modules/
+*.dump
+backups/
+__gate_probe.tmp
+
+gold-questions.json
+SETUP-NOTES.md
+agent/.transcript.jsonl

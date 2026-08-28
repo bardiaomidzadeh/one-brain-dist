@@ -1,0 +1,55 @@
+# ONE Brain — TLS-Abschluss.
+#
+# Caddy holt und erneuert das Zertifikat selbst. Kein certbot, kein Cron,
+# keine abgelaufene Kette an einem Sonntagmorgen.
+#
+# {$VAR} liest Caddy direkt aus der Umgebung — es gibt hier bewusst keinen
+# Template-Schritt, der schiefgehen koennte.
+
+{
+	email {$ONEBRAIN_ACME_EMAIL}
+	# Nur die Zertifikatsverwaltung nach aussen. Admin-API aus, sie braucht
+	# hier niemand und sie waere eine weitere offene Tuer.
+	admin off
+}
+
+{$ONEBRAIN_DOMAIN} {
+	encode zstd gzip
+
+	# Die API. Alles andere unter /mcp* geht an den Server, inklusive der
+	# Session-Header, die das Streamable-HTTP-Transport braucht.
+	handle /mcp* {
+		reverse_proxy mcp:3000 {
+			# Der Server schreibt die echte Client-IP ins Zugriffsprotokoll.
+			header_up X-Forwarded-For {remote_host}
+			# Lange Antworten (Suche ueber viele Chunks) duerfen dauern.
+			transport http {
+				read_timeout 120s
+			}
+		}
+	}
+
+	# Health ohne Token, aber auch ohne Inhalt: beantwortet nur, ob der
+	# Prozess lebt. Nuetzlich fuer Uptime-Pruefungen des Kunden.
+	handle /health {
+		reverse_proxy mcp:3000
+	}
+
+	# Alles andere: kurze Auskunft, keine Details. Wer hier landet, hat sich
+	# verlaufen — er muss nicht erfahren, was dahinter liegt.
+	handle {
+		respond "ONE Brain" 200
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		# Der Server ist eine API, kein Browser-Ziel.
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

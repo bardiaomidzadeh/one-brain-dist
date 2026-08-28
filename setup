@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+#
+# ONE Brain — Einstieg.
+#
+# Startet den Setup-Agenten. Er fuehrt das Gespraech; installiert wird von
+# install.sh. Wer lieber ohne Agent arbeitet, ruft install.sh direkt auf —
+# das Ergebnis ist dasselbe, nur ohne Erklaerungen unterwegs.
+#
+#   ./setup                          auf der Box selbst
+#   ./setup --ssh root@1.2.3.4       vom eigenen Rechner aus
+#   ./setup --help                   alle Optionen
+#
+# Voraussetzung: Node 20 oder neuer, und ein Zugang zum Modell
+# (ANTHROPIC_API_KEY oder eine bestehende Claude-Code-Anmeldung).
+
+set -uo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+if ! command -v node >/dev/null 2>&1; then
+  cat >&2 <<'MSG'
+Node ist nicht installiert.
+
+Der Setup-Agent braucht Node 20 oder neuer. install.sh braucht es NICHT — wer
+ohne Agent installieren will, kann direkt weitermachen:
+
+  sudo ./install.sh --company "..." --slug ... --domain ... --acme-email ...
+
+Fuer den Agenten auf Ubuntu:
+
+  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+  sudo apt-get install -y nodejs
+
+Bewusst nicht automatisch: eine Laufzeit auf einem fremden Server zu
+installieren, ohne dass jemand zugestimmt hat, gehoert sich nicht.
+MSG
+  exit 2
+fi
+
+MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
+if [ "${MAJOR:-0}" -lt 20 ]; then
+  echo "Node ${MAJOR} ist zu alt — der Agent braucht 20 oder neuer." >&2
+  exit 2
+fi
+
+if [ ! -d agent/node_modules ]; then
+  echo "Einmalig: Abhaengigkeiten des Agenten installieren ..."
+  ( cd agent && npm install --no-audit --no-fund ) \
+    || { echo "npm install in agent/ fehlgeschlagen." >&2; exit 1; }
+  echo ""
+fi
+
+exec node agent/setup.mjs "$@"

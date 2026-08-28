@@ -1,0 +1,11 @@
+{
+  "_hinweis": "Antworten fuer einen Testlauf ohne Gespraech. Domain und E-Mail vor einem echten Lauf auf die eigene Testbox aendern — agent/e2e.sh macht das selbst.",
+  "company": "Acme Werkzeugbau GmbH",
+  "slug": "acme",
+  "domain": "brain.example.com",
+  "acme_email": "ops@example.com",
+  "fts_language": "german",
+  "documents_dir": "agent/fixtures/dokumente",
+  "confirm": "ja",
+  "clarify": "Keine weiteren Angaben. Bitte mit dem fortfahren, was vorliegt, und Annahmen im Abschlussbericht nennen."
+}

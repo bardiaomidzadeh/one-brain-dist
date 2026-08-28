@@ -1,0 +1,116 @@
+# ONE Brain — Skelett-Stack (db + ollama).
+# mcp und caddy kommen dazu, sobald der Server portiert ist.
+#
+# Zwei Netze mit Absicht: `internal` hat kein Gateway nach draussen fuer die
+# Datenhaltung, `edge` bekommt spaeter nur Caddy + MCP. Dadurch kann der
+# Reverse-Proxy Postgres physisch nicht erreichen — nicht per Konfiguration,
+# sondern per Topologie.
+
+name: onebrain
+
+services:
+  db:
+    # Fertiges Image mit pgvector — die Extension selbst zu bauen ist eine
+    # Fehlerquelle ohne Gegenwert. Version bewusst gepinnt.
+    image: pgvector/pgvector:pg15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-onebrain}
+      POSTGRES_USER: ${POSTGRES_USER:-onebrain}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt — install.sh erzeugt sie}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+    # KEIN `ports:`. Die Datenbank ist von aussen nicht erreichbar.
+    # Wer psql braucht: `docker compose exec db psql -U $POSTGRES_USER`.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-onebrain} -d ${POSTGRES_DB:-onebrain}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  ollama:
+    # Laeuft lokal auf der Kundenbox: kein Text verlaesst den Server.
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    networks:
+      - internal
+    # Ebenfalls kein `ports:`. Ollama hat keinerlei Authentifizierung —
+    # oeffentlich erreichbar waere es ein offenes Scheunentor.
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  mcp:
+    build: .
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: ${POSTGRES_DB:-onebrain}
+      POSTGRES_USER: ${POSTGRES_USER:-onebrain}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt}
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      ONEBRAIN_COMPANY: ${ONEBRAIN_COMPANY:-ONE Brain}
+      ONEBRAIN_FTS_LANGUAGE: ${ONEBRAIN_FTS_LANGUAGE:-german}
+    depends_on:
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    networks:
+      # In beiden Netzen: internal, um db und ollama zu erreichen; edge, damit
+      # Caddy hierher kann. Caddy selbst ist NICHT in internal — es kann
+      # Postgres daher nicht erreichen, auch nicht bei einer Fehlkonfiguration.
+      - internal
+      - edge
+    # Auch hier kein `ports:`. Erreichbar wird der Server erst ueber Caddy —
+    # bis dahin nur vom Host aus ueber die Container-IP, wie Ollama.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      ONEBRAIN_DOMAIN: ${ONEBRAIN_DOMAIN:?ONEBRAIN_DOMAIN fehlt}
+      ONEBRAIN_ACME_EMAIL: ${ONEBRAIN_ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Benannte Volumes, nicht optional: hier liegen ACME-Konto und Zertifikat.
+      # Gehen sie verloren, wird bei jedem Neustart neu ausgestellt — und
+      # Let's Encrypt drosselt nach wenigen Versuchen pro Woche.
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      # Die EINZIGEN veroeffentlichten Ports im ganzen Stack.
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    depends_on:
+      - mcp
+    networks:
+      - edge
+
+volumes:
+  pgdata:
+  ollama_models:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+    driver: bridge
+  edge:
+    driver: bridge

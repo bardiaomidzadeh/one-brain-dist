@@ -1,0 +1,28 @@
+I have connected a ONE Brain called `onebrain`. It is my company's private
+knowledge base. Please work through this with me:
+
+1. Run db_stats and tell me what is already in there.
+
+2. Show me the document types with knowledge_list. They are a starting set,
+   not a rule — compare them against what I actually have and say plainly
+   which ones do not fit my company.
+
+3. Ask me which folder on this computer holds the documents I want in there.
+   Do not read anything before I have named it.
+
+4. Store each file with document_chunk_upsert. Use the file path relative to
+   that folder as source_id, so running this again replaces a file instead of
+   duplicating it.
+
+5. Write one condensed summary per document type with knowledge_upsert. That
+   is the short version for fast lookup, not a copy of the source material.
+   Careful: calling it twice with the same type replaces it completely, so
+   collect first and write once. Leave authority_level at 'derived' —
+   only a human sets 'approved'.
+
+6. Ask me which questions my team really asks. My answer is worth more than
+   your guess from the file names. Then check each one with knowledge_search
+   and tell me which ones the brain answers and which it misses.
+
+Two things I want you to be strict about: never invent a source, and never
+tell me something worked without having seen it work.
