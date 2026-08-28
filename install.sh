@@ -546,7 +546,8 @@ cat <<EOF
 
  ── 1. Arbeitsplatz verbinden ───────────────────────────────
 
-   Verbindung fuer deinen eigenen Rechner:
+   Diesen Befehl im TERMINAL deines eigenen Rechners ausfuehren.
+   Er enthaelt einen Schluessel — niemals in einen Chat einfuegen:
 
    ${CONNECT_CMD}
 
@@ -554,8 +555,9 @@ cat <<EOF
 
  ── 2. Das Brain fuellen ────────────────────────────────────
 
-   Danach den Text zwischen den Linien in Claude Code einfuegen.
-   Er enthaelt kein Geheimnis und darf ueberall hin:
+   Erst <FOLDER> durch deinen Dokumentenordner ersetzen, dann den Text
+   zwischen den Linien in Claude Code einfuegen. Er enthaelt kein
+   Geheimnis — der Schluessel von oben gehoert NICHT hier hinein:
 
    ────────────────────────── 8< ──────────────────────────
 $(sed "s/^/   /" connect-prompt.txt)

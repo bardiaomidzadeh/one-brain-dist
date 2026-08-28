@@ -187,9 +187,27 @@ test("der Installer liest den Prompt, der mitgeliefert wird", () => {
 
     const prompt = readFileSync(path.join(tree, "connect-prompt.txt"), "utf8");
     assert.ok(prompt.length > 200, "der Prompt ist verdaechtig kurz");
+
     // Der Prompt geht in einen Chat. Ein Schluessel darf dort nie hineingeraten
     // — deshalb der getrennte Shell-Befehl fuer den Token.
     assert.doesNotMatch(prompt, /ob_live_/, "im Prompt darf kein Schluessel stehen");
+
+    // Und er muss KURZ bleiben.
+    //
+    // Die erste Fassung war eine nummerierte Liste ueber 28 Zeilen. Ein
+    // Claude-Code auf dem Rechner des Kunden hat sie als Prompt-Injection
+    // eingestuft und die Ausfuehrung verweigert — zu Recht: ein Wall von
+    // Anweisungen, der als Dokument ankommt und einem Assistenten sagt, er
+    // solle lokale Dateien an eine URL schicken, sieht genau so aus wie ein
+    // Angriff. Kurz und in der Ich-Form gelesen es sich als das, was es ist:
+    // die Bitte des Nutzers.
+    assert.ok(prompt.length < 1200,
+      "der Prompt ist zu lang — lange Anweisungslisten werden als Injection " +
+      "eingestuft und abgelehnt. Kurz halten, erste Person.");
+
+    // Der Ordner wird vom Kunden eingesetzt, damit der Assistent nicht
+    // nachfragen muss und nichts ausserhalb liest.
+    assert.match(prompt, /<FOLDER>/, "der Platzhalter fuer den Ordner fehlt");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -31,13 +31,25 @@ against your own documents.
 
 ## The first thing to do after connecting
 
-Your brain starts empty. The installer prints a block of text to paste into
-Claude Code that walks you through filling it: which folder your documents are
-in, how they get stored, and which questions to test it with.
+Your brain starts empty. [`connect-prompt.txt`](connect-prompt.txt) is a short
+request you paste into Claude Code. **Replace `<FOLDER>` with the folder holding
+your documents first** — then it runs through without asking you anything.
 
-That same text is in [`connect-prompt.txt`](connect-prompt.txt). It contains no
-secrets, so you can paste it anywhere, share it with a colleague, or edit it to
-fit how your company works.
+It will: load every file in that folder, write one summary per document type,
+propose fifteen questions your team would ask, and test each one — telling you
+which the brain answers and which it misses.
+
+### Two rules about that paste
+
+**Never paste the connect command from step one into a chat.** It carries your
+key. It belongs in a terminal. The prompt file deliberately contains no secret,
+so the two are safe to keep apart.
+
+**Keep the request short and in your own words.** A long block of step-by-step
+orders pasted into an AI reads exactly like a prompt-injection attack — text
+arriving as a document, telling the assistant to send local files to a URL. A
+careful assistant will refuse, and it is right to. Ours is one short paragraph
+in the first person for that reason. If you want to change it, keep it that way.
 
 ## What the key can and cannot do
 
@@ -47,6 +59,20 @@ knowledge — everything day-to-day work needs.
 It cannot create or revoke other keys. That is deliberate: key management stays
 on the server with the `admin` token in `.env`, so a key on a laptop can never
 be used to mint more keys.
+
+## If the key ends up somewhere it should not
+
+Pasted into a chat, sent by email, committed to a repository — treat it as lost
+and replace it. It takes thirty seconds and costs nothing:
+
+```bash
+cd /opt/onebrain
+echo '{"name":"laptop-2","role":"user"}' | ./scripts/api-call.sh add_api_key
+echo '{"name":"laptop"}'                 | ./scripts/api-call.sh remove_api_key
+```
+
+Then re-run `claude mcp add` on your machine with the new key (remove the old
+entry first: `claude mcp remove onebrain`).
 
 ## If you lose the key
 
