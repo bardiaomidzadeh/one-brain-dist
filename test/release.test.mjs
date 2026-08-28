@@ -34,6 +34,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /** Alles, was der Kunde direkt aufruft oder was von einem Skript gestartet wird. */
 const AUSFUEHRBAR = [
   "setup",
+  "onebrain-setup.sh",
   "install.sh",
   "smoke-test.sh",
   "verify-knowledge.sh",
@@ -170,6 +171,8 @@ test("das Release enthaelt, was der Kunde zum Loslegen braucht", () => {
     for (const f of ["README.md", "CONNECT.md",
                      "install.sh", "smoke-test.sh", "verify-knowledge.sh",
                      "docker-compose.yml", "Caddyfile", "scripts/api-call.sh",
+                     "onebrain-setup.sh", "onebrain-session.cmd",
+                     "scripts/remote-install.sh",
                      "workspace-template.md"]) {
       assert.equal(existsSync(path.join(tree, f)), true, `${f} fehlt im Release`);
     }

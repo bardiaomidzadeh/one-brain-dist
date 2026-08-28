@@ -21,6 +21,13 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Wo der Aufrufer steht, BEVOR wir ins Release wechseln.
+#
+# Der Arbeitsplatz gehoert in seinen Ordner, nicht in unseren. Ohne diese
+# Zeile landeten docs/ und CLAUDE.md im entpackten Release — also dort, wo
+# niemand arbeitet, und beim naechsten `git pull` mitten im Weg.
+WORKDIR="${ONEBRAIN_WORKDIR:-$PWD}"
 cd "$HERE"
 
 SOCK="${ONEBRAIN_SSH_SOCKET:-$HOME/.onebrain-session}"
@@ -101,7 +108,9 @@ RC=$?
 # taucht nirgends auf dem Schirm auf und geht durch kein Gespraech.
 step "Arbeitsplatz einrichten"
 if "${SCP[@]}" "${TARGET}:${REMOTE_DIR}/onebrain-connect.sh" "$TMP/connect.sh" >/dev/null 2>&1; then
-  bash "$TMP/connect.sh" || die "Einrichtung des Arbeitsplatzes fehlgeschlagen"
+  ( cd "$WORKDIR" && bash "$TMP/connect.sh" ) \
+    || die "Einrichtung des Arbeitsplatzes fehlgeschlagen"
+  ok "eingerichtet in ${WORKDIR}"
 else
   ok "kein neues Einrichtungsskript — der Schluessel bestand schon (siehe CONNECT.md)"
 fi
@@ -109,7 +118,7 @@ fi
 cat <<EOF
 
 ────────────────────────────────────────────────────────────
- Fertig. Der Server steht, und dieser Ordner ist damit verbunden.
+ Fertig. Der Server steht, und ${WORKDIR} ist damit verbunden.
 
  Dokumente nach docs/ legen, Claude Code hier starten und eingeben:
 
