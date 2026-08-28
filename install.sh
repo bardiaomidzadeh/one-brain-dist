@@ -515,23 +515,30 @@ fi
 TABLES=$(docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
   "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")
 
-# Der Endpunkt, den der Arbeitsplatz anspricht. Ohne TLS gibt es keinen
-# oeffentlichen — dann waere eine Anleitung dorthin eine Luege.
 ENDPOINT="https://${DOMAIN}/mcp"
 
-# Zwei Bloecke zum Kopieren, bewusst getrennt:
-#   Der Schluessel geht durch die Shell. Der Auftrag geht in den Chat.
-# Ein einziger Block mit dem Token darin waere bequemer — und wuerde eine
-# gueltige Zugangsberechtigung in ein Gespraechsprotokoll schreiben.
+# Der Arbeitsplatz wird von einem Befehl eingerichtet, nicht von einem Modell.
+#
+# Erste Fassung liess den Agenten das `claude mcp add` selbst ausfuehren, mit
+# dem Schluessel im eingefuegten Text. Ein Claude Code beim Kunden hat das
+# zweimal verweigert — zu Recht: ein Bearer-Token, das in einem Chat ankommt,
+# zusammen mit der Aufforderung, sich zu verbinden und lokale Dateien zu lesen,
+# ist nicht von einem Angriff zu unterscheiden. Das laesst sich nicht
+# umformulieren, und man sollte es auch nicht.
+#
+# Also dieselbe Trennung wie ueberall sonst hier: Einrichten ist Ausfuehrung
+# und gehoert in ein Kommando. Der Prompt danach enthaelt kein Geheimnis und
+# keine Konfiguration — nur den Auftrag.
 if [ -n "$LAPTOP_TOKEN" ]; then
-  CONNECT_CMD="claude mcp add --transport http onebrain ${ENDPOINT} \\
-    --header \"Authorization: Bearer ${LAPTOP_TOKEN}\" --scope user"
-  CONNECT_NOTE="Der Schluessel wird genau einmal angezeigt und laesst sich nicht
-   wiederherstellen — nur ersetzen. Wie, steht in CONNECT.md."
+  SETUP_BLOCK="claude mcp add --transport http onebrain ${ENDPOINT} \\
+  --header \"Authorization: Bearer ${LAPTOP_TOKEN}\" --scope user
+mkdir -p docs
+cat > CLAUDE.md <<'ONEBRAIN'
+$(sed -e "s/__COMPANY__/${COMPANY}/g" -e "s/__DOMAIN__/${DOMAIN}/g" -e "s/__SLUG__/${SLUG}/g" workspace-template.md)
+ONEBRAIN"
 else
-  CONNECT_CMD="Der Arbeitsplatz-Schluessel besteht bereits."
-  CONNECT_NOTE="Er wurde bei der Erstinstallation einmal angezeigt und laesst sich
-   nicht wiederherstellen. Ist er verloren, legt CONNECT.md einen neuen an."
+  SETUP_BLOCK="# Der Arbeitsplatz-Schluessel besteht bereits und wird nicht erneut
+# angezeigt. Einen neuen anlegen: siehe CONNECT.md."
 fi
 
 cat <<EOF
@@ -544,24 +551,26 @@ cat <<EOF
    Domain     ${DOMAIN}
    Tabellen   ${TABLES}
 
- ── 1. Arbeitsplatz verbinden ───────────────────────────────
+ ── 1. Arbeitsplatz einrichten ──────────────────────────────
 
-   Diesen Befehl im TERMINAL deines eigenen Rechners ausfuehren.
-   Er enthaelt einen Schluessel — niemals in einen Chat einfuegen:
+   Auf deinem eigenen Rechner: in den Ordner wechseln, in dem du
+   arbeiten willst, und das Folgende ins TERMINAL einfuegen.
+   Nicht in einen Chat — es enthaelt deinen Schluessel.
 
-   ${CONNECT_CMD}
+${SETUP_BLOCK}
 
-   ${CONNECT_NOTE}
+   Das verbindet den Ordner mit deinem Brain, legt docs/ an und
+   schreibt eine CLAUDE.md, damit jede kuenftige Sitzung weiss,
+   wie sie damit umgeht. Der Schluessel wird genau einmal
+   angezeigt — ersetzen statt wiederherstellen, siehe CONNECT.md.
 
  ── 2. Das Brain fuellen ────────────────────────────────────
 
-   Erst <FOLDER> durch deinen Dokumentenordner ersetzen, dann den Text
-   zwischen den Linien in Claude Code einfuegen. Er enthaelt kein
-   Geheimnis — der Schluessel von oben gehoert NICHT hier hinein:
+   Dokumente nach docs/ legen, dann Claude Code in dem Ordner
+   starten und das hier eingeben. Kein Geheimnis, keine
+   Einrichtung — nur der Auftrag:
 
-   ────────────────────────── 8< ──────────────────────────
 $(sed "s/^/   /" connect-prompt.txt)
-   ────────────────────────── 8< ──────────────────────────
 
  ── Hinweise ────────────────────────────────────────────────
 
@@ -574,8 +583,6 @@ $(sed "s/^/   /" connect-prompt.txt)
 EOF
 
 if [ "$SKIP_DNS" -eq 1 ]; then
-  # Ohne TLS zeigt der Block oben auf eine Adresse, die es nach aussen nicht
-  # gibt. Das gehoert dazugesagt, sonst probiert es jemand zwanzig Minuten.
   warn "Mit --skip-dns laeuft kein Caddy: ${ENDPOINT} ist von aussen nicht erreichbar."
   warn "Der Verbindungsbefehl oben funktioniert erst nach einem Lauf mit TLS."
 fi

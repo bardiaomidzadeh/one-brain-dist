@@ -73,12 +73,24 @@ and live nowhere else.
 
 To check a server without changing it, add `--preflight-only`.
 
-### 3. Connect your own machine
+### 3. Set up your own machine
 
-The installer ends by printing two things to copy: one command that connects your
-computer, and one block of text that tells your AI what to do first. Follow those.
+The installer ends by printing a block you paste into a **terminal** on your own
+computer, in whatever folder you want to work in. It connects that folder to your
+brain, creates `docs/`, and writes a `CLAUDE.md` so every future session knows how
+to use it.
 
-Full details, and what to do if you lose the key: [`CONNECT.md`](CONNECT.md).
+Then you put documents in `docs/`, open Claude Code there, and type:
+
+```
+Fill my ONE Brain from ./docs
+```
+
+It loads your files, summarises them, and proposes fifteen questions your team
+would ask — then tests each one and tells you which the brain answers and which
+it misses. That last list is the honest measure of whether this is working.
+
+Details, and how to replace a key: [`CONNECT.md`](CONNECT.md).
 
 ## Updating
 

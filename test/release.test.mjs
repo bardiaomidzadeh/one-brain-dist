@@ -167,7 +167,8 @@ test("das Release enthaelt, was der Kunde zum Loslegen braucht", () => {
   try {
     for (const f of ["README.md", "CONNECT.md", "connect-prompt.txt",
                      "install.sh", "smoke-test.sh", "verify-knowledge.sh",
-                     "docker-compose.yml", "Caddyfile", "scripts/api-call.sh"]) {
+                     "docker-compose.yml", "Caddyfile", "scripts/api-call.sh",
+                     "workspace-template.md"]) {
       assert.equal(existsSync(path.join(tree, f)), true, `${f} fehlt im Release`);
     }
   } finally {
@@ -205,9 +206,16 @@ test("der Installer liest den Prompt, der mitgeliefert wird", () => {
       "der Prompt ist zu lang — lange Anweisungslisten werden als Injection " +
       "eingestuft und abgelehnt. Kurz halten, erste Person.");
 
-    // Der Ordner wird vom Kunden eingesetzt, damit der Assistent nicht
-    // nachfragen muss und nichts ausserhalb liest.
-    assert.match(prompt, /<FOLDER>/, "der Platzhalter fuer den Ordner fehlt");
+    // Der Ordner steht fest: das Einrichtungskommando legt docs/ an. Damit
+    // muss der Assistent nichts erfragen und liest nichts ausserhalb.
+    assert.match(prompt, /\.\/docs/, "der Prompt nennt den Ordner nicht");
+
+    // Und er richtet nichts ein. Konfiguration gehoert in das Kommando aus
+    // Schritt 1 — ein Prompt, der ein `claude mcp add` mit Schluessel
+    // enthaelt, wird von einem sorgfaeltigen Client abgelehnt, und das zu
+    // Recht. Zweimal beim Kunden passiert.
+    assert.doesNotMatch(prompt, /mcp add/, "der Prompt darf nichts einrichten");
+    assert.doesNotMatch(prompt, /Bearer/, "im Prompt darf kein Token stehen");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

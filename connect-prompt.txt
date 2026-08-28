@@ -1,12 +1,8 @@
-Use the `onebrain` tools to fill my company knowledge base.
+Fill my ONE Brain from ./docs
 
-My documents are in: <FOLDER>
+Load every file with document_chunk_upsert (source_id = path relative to ./docs).
+Write one condensed summary per document type with knowledge_upsert. Then propose
+15 questions my team would realistically ask, check each with knowledge_search,
+and show me which ones the brain answers and which it misses.
 
-Load every file in there with document_chunk_upsert, using the path relative to
-that folder as source_id. Then write one condensed summary per document type
-with knowledge_upsert at authority_level 'derived'. Then propose 15 questions my
-team would realistically ask, check each one with knowledge_search, and show me
-which ones the brain answers and which it misses.
-
-Work through it without asking me anything. Never invent a source, and don't
-tell me something worked unless you saw it work.
+Work through it without asking me anything.
