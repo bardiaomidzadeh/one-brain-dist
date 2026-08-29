@@ -54,6 +54,10 @@ while [ $# -gt 0 ]; do
     --domain)       DOMAIN="${2:?}"; shift 2 ;;
     --acme-email)   ACME_EMAIL="${2:?}"; shift 2 ;;
     --fts-language) FTS_LANGUAGE="${2:?}"; shift 2 ;;
+    # Seit 2026-08-29 wirkungslos: kleine Maschinen warnen nur noch. Die
+    # Fahne wird weiter angenommen, weil sie in Anleitungen, Skripten und
+    # Kundenmails steht — ein "unbekannte Option" waere dort ein Abbruch
+    # ohne Grund.
     --allow-small)  ALLOW_SMALL=1; shift ;;
     --skip-dns)     SKIP_DNS=1; shift ;;
     --preflight-only) PREFLIGHT_ONLY=1; shift ;;
@@ -101,30 +105,47 @@ case "${VERSION_ID:-}" in
   *) warn "Ubuntu ${VERSION_ID:-?} ist nicht getestet (unterstuetzt: 22.04, 24.04)" ;;
 esac
 
-RAM_GB=$(( $(grep MemTotal /proc/meminfo | awk '{print $2}') / 1024 / 1024 ))
-EFFECTIVE_MIN=$MIN_RAM_GB
-[ "$ALLOW_SMALL" -eq 1 ] && EFFECTIVE_MIN=3
-if [ "$RAM_GB" -lt "$EFFECTIVE_MIN" ]; then
-  die "Zu wenig RAM: ${RAM_GB} GB, benoetigt ${EFFECTIVE_MIN} GB" \
-      "Postgres, Ollama und das Embedding-Modell brauchen zusammen ${MIN_RAM_GB} GB.
-Groessere Instanz waehlen — oder --allow-small fuer einen reinen Testlauf."
-fi
-[ "$ALLOW_SMALL" -eq 1 ] && [ "$RAM_GB" -lt "$MIN_RAM_GB" ] \
-  && warn "${RAM_GB} GB RAM — unter der Empfehlung von ${MIN_RAM_GB} GB (--allow-small)" \
-  || ok "${RAM_GB} GB RAM"
+# RAM: 8 GB sind die Empfehlung, nicht die Grenze.
+#
+# Geaendert 2026-08-29, nachdem der harte Stopp bei 3 GB einen Kunden auf
+# seiner eigenen Box blockierte. Die Empfehlung war immer konservativ —
+# die Testbox laeuft seit Wochen mit 3 GB durch, inklusive 27/27 Smoke-Test
+# und 20/20 Gold-Fragen. Wer eine kleine Maschine hat, soll selbst
+# entscheiden duerfen.
+#
+# Was BLEIBT, ist ein echter Boden. Unter 2 GB laedt Ollama das Modell nicht
+# mehr in den Speicher, und der Lauf stirbt mitten im Download am OOM-Killer
+# — mit einer Meldung, die niemand mit "zu wenig RAM" verbindet. Eine klare
+# Absage vorher ist besser als ein Abbruch nach zehn Minuten.
+RAM_HARD_MIN=2
 
-# Platte: dieselbe Logik wie beim RAM. --allow-small ist die "Testbox"-Fahne und
-# muss beide Schranken senken — sonst kommt man mit ihr trotzdem nicht durch.
-DISK_GB=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
-EFFECTIVE_DISK=$MIN_DISK_GB
-[ "$ALLOW_SMALL" -eq 1 ] && EFFECTIVE_DISK=15
-if [ "$DISK_GB" -lt "$EFFECTIVE_DISK" ]; then
-  die "Zu wenig Plattenplatz: ${DISK_GB} GB frei, benoetigt ${EFFECTIVE_DISK} GB" \
-      "Docker-Images (~2 GB), das Embedding-Modell und wachsende Wissensdaten
-brauchen Luft. Groessere Platte — oder --allow-small fuer einen Testlauf."
+RAM_GB=$(( $(grep MemTotal /proc/meminfo | awk '{print $2}') / 1024 / 1024 ))
+if [ "$RAM_GB" -lt "$RAM_HARD_MIN" ]; then
+  die "Zu wenig RAM: ${RAM_GB} GB" \
+      "Unter ${RAM_HARD_MIN} GB laesst sich das Embedding-Modell nicht laden —
+der Lauf wuerde mittendrin vom OOM-Killer beendet. Groessere Instanz waehlen."
 fi
-if [ "$ALLOW_SMALL" -eq 1 ] && [ "$DISK_GB" -lt "$MIN_DISK_GB" ]; then
-  warn "${DISK_GB} GB frei — unter der Empfehlung von ${MIN_DISK_GB} GB (--allow-small)"
+if [ "$RAM_GB" -lt "$MIN_RAM_GB" ]; then
+  warn "${RAM_GB} GB RAM — empfohlen sind ${MIN_RAM_GB} GB"
+  warn "Es laeuft, aber unter Last kann es eng werden."
+else
+  ok "${RAM_GB} GB RAM"
+fi
+
+# Platte: dieselbe Ueberlegung. Der Boden ist hier haerter begruendet —
+# Docker-Images (~2 GB) plus Modell plus Datenbank passen unter 10 GB
+# schlicht nicht, und eine volle Platte beschaedigt Postgres.
+DISK_HARD_MIN=10
+
+DISK_GB=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
+if [ "$DISK_GB" -lt "$DISK_HARD_MIN" ]; then
+  die "Zu wenig Plattenplatz: ${DISK_GB} GB frei" \
+      "Docker-Images (~2 GB), das Embedding-Modell und die Datenbank brauchen
+mindestens ${DISK_HARD_MIN} GB. Eine volle Platte beschaedigt Postgres."
+fi
+if [ "$DISK_GB" -lt "$MIN_DISK_GB" ]; then
+  warn "${DISK_GB} GB frei — empfohlen sind ${MIN_DISK_GB} GB"
+  warn "Wissensdaten wachsen. Platz im Auge behalten."
 else
   ok "${DISK_GB} GB frei"
 fi

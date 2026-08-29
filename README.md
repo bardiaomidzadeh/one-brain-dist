@@ -9,6 +9,134 @@ Nothing leaves your machine: the embedding model runs locally on your box.
 
 ---
 
+## Before you start
+
+You need four things. Nothing else.
+
+| | |
+|---|---|
+| **A server** | Ubuntu 22.04 or 24.04, 8 GB RAM, 40 GB disk (Hetzner CPX31 or comparable). You need its address and root access. |
+| **A domain** | Something like `brain.yourcompany.com`, with an A record already pointing at that server's IP. |
+| **Your documents** | In a folder on your own computer. Handbooks, offers, processes, minutes — whatever your team asks about. |
+| **Claude Code** | On your own computer, not the server. |
+
+You do **not** need Docker, PostgreSQL, or any other software on the server.
+The installer puts it there.
+
+---
+
+## Install — three steps
+
+You are reading this on GitHub, which means you already have access. Two
+commands on your server, then one prompt on your own computer.
+
+With your invitation you received a **deploy key** — a short text block
+whose first and last lines say `BEGIN OPENSSH PRIVATE KEY` and `END
+OPENSSH PRIVATE KEY`, each fenced by five dashes. It is read-only and gives
+access to this repository and nothing else. Keep it; you will paste it in
+step 1.
+
+Log into your server first:
+
+```bash
+ssh root@YOUR-SERVER
+```
+
+### Step 1 — dependencies and the key
+
+Paste this as one block. Replace the middle part with your deploy key,
+including its `BEGIN` and `END` lines:
+
+```bash
+apt-get update && apt-get install -y git
+
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+cat > ~/.ssh/onebrain_deploy <<'DEPLOY_KEY'
+...paste your whole deploy key here, all of it, including the BEGIN and
+END lines, exactly as you received it...
+DEPLOY_KEY
+chmod 600 ~/.ssh/onebrain_deploy
+
+echo 'Key installed.'
+```
+
+The `<<'DEPLOY_KEY'` … `DEPLOY_KEY` wrapper is what lets you paste several
+lines at once. Everything between the two markers is taken literally, so
+the key's line breaks survive — which matters, because an SSH key with its
+line breaks lost will not work.
+
+### Step 2 — get the code and install
+
+One command. It clones the repository and runs the installer. Fill in your
+four values:
+
+```bash
+GIT_SSH_COMMAND='ssh -i ~/.ssh/onebrain_deploy -o StrictHostKeyChecking=accept-new' \
+  git clone git@github.com:bardiaomidzadeh/one-brain-dist.git /opt/onebrain \
+&& cd /opt/onebrain \
+&& ./install.sh --company "Acme GmbH" --slug acme \
+                --domain brain.acme.de --acme-email ops@acme.de
+```
+
+| Value | What it is |
+|---|---|
+| `--company` | Your company name, as it should appear in the system |
+| `--slug` | A short lowercase handle: letters, digits, hyphens (`acme`) |
+| `--domain` | The domain pointing at this server — the certificate is issued for it |
+| `--acme-email` | Where Let's Encrypt writes about certificate expiry |
+
+This takes a few minutes. Before it changes anything it checks DNS, RAM,
+disk and ports, and stops with a plain explanation if something is wrong.
+Then it installs Docker if needed, brings up the database, downloads the
+embedding model, applies the schema and obtains a TLS certificate.
+
+**To check the server without changing it**, add `--preflight-only` to that
+same command.
+
+**If the clone fails** with `Permission denied (publickey)`, the key was not
+pasted completely or lost its line breaks. Redo step 1. If it fails with
+`repository not found`, the key is not authorised for this repository —
+reply to your invitation email.
+
+### Step 3 — connect your own computer
+
+Back on your own machine, not the server. Make a folder to work in, start
+Claude Code there, and paste the prompt from
+[`CONNECT-PROMPT.md`](CONNECT-PROMPT.md), replacing `<SERVER>` with your
+server's address.
+
+It fetches the access key itself, writes a `.mcp.json` so this folder can
+reach your brain, creates `docs/`, and writes a `CLAUDE.md`. The key is
+never displayed — what is not shown cannot be pasted somewhere it should
+not go.
+
+Then **start a new Claude Code session** in that folder — connections are
+made at startup, so the session that set it up cannot use it yet — and say:
+
+```
+Fill my ONE Brain from ./docs
+```
+
+It reads your documents in, then proposes questions your team would really
+ask and tests each one, ending with a list of what the brain answers and
+what it misses. That list is the honest measure of whether this is working.
+
+---
+
+## Keeping the deploy key
+
+You need it again only to update. If you would rather not leave it on the
+server:
+
+```bash
+shred -u ~/.ssh/onebrain_deploy
+```
+
+Updating later then means repeating step 1 first. Leaving it in place is
+also fine — it is read-only, scoped to this one repository, and the file is
+mode 600.
+
+---
 ## What gets installed
 
 | Component | Job |
@@ -19,121 +147,112 @@ Nothing leaves your machine: the embedding model runs locally on your box.
 | Caddy | HTTPS with automatic certificates |
 | Backup | Nightly dump, tested restore path |
 
-Only ports 80 and 443 are published. The database is not reachable from outside
-the server — deliberately.
+Only ports 80 and 443 are published. The database is not reachable from
+outside the server — deliberately.
 
-## Requirements
+---
 
-- A server you control (Hetzner CPX31 or comparable), **8 GB RAM**, 40 GB disk
-- Ubuntu 22.04 or 24.04
-- A domain pointing at that server (e.g. `brain.yourcompany.com`)
+## Using it, day to day
 
-## Install
+Ask in plain language, in any Claude Code session in your workspace folder:
 
-Two ways. Pick the one that matches who is doing it.
-
-### The short way: drive it from your own machine
-
-You never log into the server or type a command on it. You open one SSH session
-by hand, and everything else runs from your own computer.
-
-```bash
-scripts/open-session.sh root@brain.acme.de        # asks for the password, once
-
-scripts/remote-install.sh root@brain.acme.de \
-  --company "Acme GmbH" --slug acme \
-  --domain brain.acme.de --acme-email ops@acme.de
+```
+What is our return period?
+What did we agree with Meyer GmbH about delivery times?
+Which of our offers mention on-site training?
 ```
 
-That uploads the release, installs it, brings back the connect script and runs
-it — so when it finishes, your folder is already connected to your brain.
+It searches by meaning, not keywords, so ask the way you would ask a
+colleague.
 
-The password is typed once, into your own terminal. What stays behind is an
-authenticated socket, not a credential: it expires after eight hours, it belongs
-to that one machine, and it can be handed to a tool or an assistant without ever
-handing over the password itself.
+**Adding more documents later:** put them in `docs/` and say
+`Fill my ONE Brain from ./docs` again. Files are replaced, not duplicated.
 
-Close it when you are done:
+**Checking quality after adding documents:**
 
 ```bash
-scripts/open-session.sh root@brain.acme.de --close
+./verify-knowledge.sh
 ```
 
-**On Windows, run these in Git Bash, not PowerShell.** Windows ships an OpenSSH
-that cannot share sessions; the one in Git for Windows can.
+Gold questions are the questions your people actually ask, each paired with
+the document holding the answer. The run reports which the brain finds and
+which it misses. Edit the file, add to it, run it again after every import.
 
-### The long way: on the server itself
+---
 
-If you would rather work on the machine directly.
+## Adding a colleague
 
-#### 1. Get the code
+Give each person their own key, named after them. Then when someone leaves
+or a laptop is lost, you revoke one key instead of rotating everyone's.
 
-You were invited to a private repository. Log in from the server — the code
-appears in your terminal, you approve it in the browser on your own laptop.
+On the server:
 
 ```bash
-sudo apt-get update && sudo apt-get install -y gh
-gh auth login          # GitHub.com -> HTTPS -> Login with a web browser
-
-sudo gh repo clone <org>/one-brain-dist /opt/onebrain
 cd /opt/onebrain
-```
-#### 2. Install
-
-```bash
-sudo ./install.sh --company "Acme GmbH" --slug acme \
-                  --domain brain.acme.de --acme-email ops@acme.de
+echo '{"name":"anna","role":"user"}' | ./scripts/api-call.sh add_api_key
 ```
 
-It checks your DNS, RAM, disk and ports before touching anything, then brings the
-stack up and applies the schema. Credentials are generated into `.env` (mode 600)
-and live nowhere else.
+That prints the key **once** — keys are stored hashed and cannot be
+recovered, only replaced. They put it in a `.mcp.json` in their own
+workspace folder, exactly like yours.
 
-To check a server without changing it, add `--preflight-only`.
+Full detail, including revoking a key: [`CONNECT.md`](CONNECT.md).
 
-#### 3. Set up your own machine
+---
 
-The installer ends with two commands for your own computer. Run them in
-whatever folder you want to work in.
-
-**Linux or macOS:**
-
-```bash
-scp root@YOUR-DOMAIN:/opt/onebrain/onebrain-connect.sh .
-bash onebrain-connect.sh
-```
-
-**Windows (PowerShell):**
-
-```powershell
-scp root@YOUR-DOMAIN:/opt/onebrain/onebrain-connect.ps1 .
-.\onebrain-connect.ps1
-```
-
-That connects the folder to your brain, creates `docs/`, and writes a `CLAUDE.md`
-so every future session there knows how to use it. Delete the script afterwards —
-it holds your key.
-Then put documents in `docs/`, open Claude Code there, and type:
-
-```
-Fill my ONE Brain from ./docs
-```
-
-It loads your files, summarises them, and proposes fifteen questions your team
-would ask — then tests each one and tells you which the brain answers and which
-it misses. That last list is the honest measure of whether this is working.
-
-Details, and how to replace a key: [`CONNECT.md`](CONNECT.md).
 ## Updating
 
+On the server. If you removed the deploy key, redo step 1 first:
+
 ```bash
 cd /opt/onebrain
-sudo git pull
-sudo ./install.sh <the same arguments as before>
+GIT_SSH_COMMAND='ssh -i ~/.ssh/onebrain_deploy' git pull
+./install.sh <the same arguments as before>
 ```
 
-Re-running the installer is safe. Your `.env`, your keys and your data stay as
-they are; only the software is brought up to date.
+Re-running is safe. Your `.env`, your keys and your data stay as they are;
+only the software is brought up to date.
+
+**One warning:** if you ever stop the stack, use `docker compose down`
+**without** `-v`. The `-v` deletes the certificate store, and repeated
+certificate requests hit Let's Encrypt's rate limit — five per domain per
+week, after which HTTPS fails for days.
+
+---
+
+## If something goes wrong
+
+| Symptom | Where to look |
+|---|---|
+| Install stopped with a message | Read it — the installer names what to do, not just "failed" |
+| DNS complaint | `./scripts/dns-probe.sh <domain>` prints the exact record to create |
+| Is the server alive? | `curl -sI https://YOUR-DOMAIN/health` — needs no key, reveals nothing |
+| Something is broken | `docker compose logs db\|ollama\|mcp\|caddy \| tail -30` |
+| `Permission denied (publickey)` when cloning | The deploy key lost its line breaks. Redo step 1. |
+| `repository not found` when cloning | The key is not authorised here — reply to your invitation email. |
+| Claude cannot see the brain | Did you start a **new** session after step 3? Is `.mcp.json` in that folder? |
+
+---
+
+## Other ways in
+
+The three steps above are the supported path. Two alternatives exist for
+people who want them:
+
+**Drive it from your own computer** instead of logging into the server.
+[`INSTALL-PROMPT.md`](INSTALL-PROMPT.md) is a longer prompt that does the
+whole thing over SSH, including the install. It needs a working SSH key to
+your server before it can start.
+
+**A guided installer that runs as an agent on the server** (`./setup`). It
+interviews you, reads real error output and helps with your documents
+afterwards. It costs more to run — Node 20 and an Anthropic API key on the
+machine it runs on. Details: [`agent/README.md`](agent/README.md).
+
+Both call the same `install.sh` as the steps above, which is why they cannot
+drift apart.
+
+---
 
 ## Verify it worked
 
@@ -141,47 +260,12 @@ they are; only the software is brought up to date.
 ./smoke-test.sh
 ```
 
-Five checks: unauthenticated requests are rejected · the tool list is what it should
-be · a document written, embedded and found again by a paraphrase · search degrades
-to keyword-only when the embedding service is down instead of failing · a backup
-restores completely, tokens included.
-
-
-## Verify it finds the right thing
-
-```bash
-./verify-knowledge.sh
-```
-
-The smoke test proves the machinery works. This proves it works **on your
-documents**. A gold question is a question your people actually ask, together with
-the document the answer is in; the run reports which ones the brain finds and which
-it misses. The setup agent drafts them with you, but the file is plain JSON — edit
-it, add to it, run it again after every import.
-
-It keeps "found nothing" apart from "measured nothing": a dead API, or a search
-that quietly fell back to keyword matching, exits 3 — not 0, and not 1.
+Checks that unauthenticated requests are rejected · the tool list is what it
+should be · a document written, embedded and found again by a paraphrase ·
+search degrades to keyword-only when the embedding service is down instead
+of failing · a backup restores completely, tokens included.
 
 ---
-
-## Advanced: a guided install
-
-There is a second way in. Instead of running the installer yourself, an agent can
-run it for you: it interviews you, explains a DNS problem in terms of the record
-you need to change, reads the real error output when something breaks, and
-afterwards helps you get your documents in.
-
-```bash
-./setup                        # on the server
-./setup --ssh root@1.2.3.4     # from your own machine
-```
-
-It costs more to run: Node 20 on whichever machine it runs on, and an Anthropic
-API key. It never runs a command of its own — it calls the same named scripts you
-can call yourself, which is why the two paths cannot drift apart.
-
-Most people should use the plain installer above. Details:
-[`agent/README.md`](agent/README.md).
 
 ## For contributors
 
