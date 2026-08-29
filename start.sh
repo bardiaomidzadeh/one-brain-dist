@@ -136,8 +136,15 @@ while :; do
     case "$ERG" in
       0) printf 'ok\n' > /dev/tty
          ok "Zugang zur Quelle bestaetigt"
-         umask 177
-         printf '%s' "$TOKEN" > "$TOKENFILE"
+         # umask NUR in dieser Subshell.
+         #
+         # Vorher stand hier ein blankes `umask 177` — und es galt danach
+         # weiter. Der anschliessende `git clone` legte damit JEDE Datei als
+         # 600 an, root-only. Der MCP-Container laeuft als nicht-root, konnte
+         # /app/bin/migrate.mjs nicht lesen und lief in eine Neustartschleife;
+         # nach aussen war das ein 502. Ein umask ist eine Eigenschaft der
+         # ganzen Shell, kein Argument der einen Zeile darunter.
+         ( umask 177; printf '%s' "$TOKEN" > "$TOKENFILE" )
          chmod 600 "$TOKENFILE"
          break ;;
       1) printf 'abgelehnt\n' > /dev/tty
@@ -267,7 +274,27 @@ git_mit_token() { # git_mit_token <args...> — Token nur fuer diesen Aufruf
 }
 
 if [ -d "$DIR/.git" ]; then
-  git_mit_token -C "$DIR" pull --quiet 2>/dev/null && ok "aktualisiert" || ok "unveraendert"
+  # "unveraendert" und "ich konnte nicht nachsehen" sind NICHT dasselbe.
+  #
+  # Vorher stand hier `pull 2>/dev/null && ok "aktualisiert" || ok
+  # "unveraendert"`. Ein fehlgeschlagener Abruf meldete damit Erfolg, und
+  # der Kunde installierte weiter mit altem Stand — genau der Fall, der
+  # eine gerade veroeffentlichte Korrektur unsichtbar machte. Ein
+  # Erfolgspfad, der auch ohne Erfolg erreichbar ist, ist keine Meldung.
+  VORHER="$(git -C "$DIR" rev-parse --short HEAD 2>/dev/null || echo '?')"
+  if git_mit_token -C "$DIR" pull --quiet 2>/tmp/onebrain-pull.err; then
+    NACHHER="$(git -C "$DIR" rev-parse --short HEAD 2>/dev/null || echo '?')"
+    if [ "$VORHER" = "$NACHHER" ]; then
+      ok "aktuell (${NACHHER})"
+    else
+      ok "aktualisiert (${VORHER} -> ${NACHHER})"
+    fi
+  else
+    PFEHLER="$(sed "s#${TOKEN}#***#g" /tmp/onebrain-pull.err 2>/dev/null | head -3)"
+    warn "Abruf fehlgeschlagen — es wird mit dem vorhandenen Stand (${VORHER}) weitergemacht:"
+    printf '%s\n' "$PFEHLER" | sed 's/^/         /' > /dev/tty
+  fi
+  rm -f /tmp/onebrain-pull.err
 elif [ -e "$DIR" ] && [ -n "$(ls -A "$DIR" 2>/dev/null)" ]; then
   die "${DIR} ist nicht leer und kein git-Verzeichnis" \
       "Entweder wegraeumen, oder ein anderes Ziel waehlen:
@@ -298,6 +325,17 @@ fi
 # Adresse ohne Token hinterlassen. `git pull` von Hand fragt dann nach —
 # besser als ein Geheimnis, das dauerhaft in einer Textdatei wohnt.
 git -C "$DIR" remote set-url origin "$NACKTE_URL" 2>/dev/null || true
+
+# Lesbarkeit sicherstellen, egal welches umask gerade galt.
+#
+# Der Container laeuft als nicht-root und liest seinen Code aus diesem
+# Verzeichnis. Ist eine Datei nur fuer root lesbar, startet er nicht — und
+# der Fehler zeigt sich als 502 an einer Stelle, die nichts mit Rechten zu
+# tun zu haben scheint. a+rX setzt Lesen fuer alle und das Ausfuehrungsbit
+# NUR dort, wo schon eines steht (Verzeichnisse, Skripte).
+chmod -R a+rX "$DIR" 2>/dev/null || true
+# Die .env gehoert NICHT dazu — sie enthaelt die Zugangsdaten.
+[ -f "$DIR/.env" ] && chmod 600 "$DIR/.env"
 
 chmod +x "$DIR/install.sh" 2>/dev/null || true
 [ -f "$DIR/install.sh" ] || die "install.sh fehlt in ${DIR}" \

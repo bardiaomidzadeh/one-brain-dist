@@ -253,8 +253,18 @@ test("der Installer liefert beide Einrichtungswege", () => {
     const forts = new RegExp("claude mcp add[^\\n]*\\\\$", "m");
     assert.doesNotMatch(ps, forts, "Bash-Zeilenfortsetzung im PowerShell-Skript");
 
-    // Und beide Wege muessen dem Kunden auch genannt werden.
-    assert.match(sh, /Windows \(PowerShell\)/, "der Windows-Weg wird nicht angezeigt");
+    // Angezeigt wird seit 2026-08-29 nicht mehr der scp-Weg, sondern der
+    // Prompt: der Kunde fuegt Text in Claude Code ein, und Claude liest den
+    // Schluessel selbst und schreibt die Dateien. Damit verschwindet das
+    // Betriebssystem-Problem, das diesen Test ausgeloest hat — es wird nichts
+    // mehr heruntergeladen und nichts mehr ausgefuehrt.
+    //
+    // Die beiden Skripte bleiben im Release (Zeilen oben) und bleiben damit
+    // gegen die PowerShell-Falle geprueft; sie sind jetzt der Weg von Hand.
+    assert.match(sh, /CONNECT-PROMPT\.md/,
+      "der Prompt-Weg wird dem Kunden nicht genannt");
+    assert.doesNotMatch(sh.slice(sh.indexOf("ONE Brain steht")), /scp /,
+      "der Schlussblock schickt den Kunden wieder auf den scp-Weg");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -638,16 +638,20 @@ Write-Host ""
 CONNECTPS
   umask 022
   chmod 600 onebrain-connect.ps1
-  SETUP_HINT="   Linux oder macOS:
-     scp root@${DOMAIN}:/opt/onebrain/onebrain-connect.sh .
-     bash onebrain-connect.sh
+  SETUP_HINT="   Einen leeren Ordner anlegen, Claude Code darin starten und den
+   Text aus CONNECT-PROMPT.md einfuegen — mit dieser Serveradresse:
 
-   Windows (PowerShell):
-     scp root@${DOMAIN}:/opt/onebrain/onebrain-connect.ps1 .
-     .\\onebrain-connect.ps1"
+       root@${DOMAIN}
+
+   Claude liest den Schluessel selbst ueber ssh und schreibt die
+   .mcp.json, CLAUDE.md und docs/. Nichts herunterladen, nichts
+   ausfuehren.
+
+   Die Skripte onebrain-connect.sh/.ps1 liegen hier weiterhin fuer
+   den Fall, dass jemand es lieber von Hand macht: siehe CONNECT.md."
 else
-  SETUP_HINT="   Der Arbeitsplatz-Schluessel besteht bereits. Einen neuen anlegen
-   und onebrain-connect.sh neu erzeugen: siehe CONNECT.md."
+  SETUP_HINT="   Der Arbeitsplatz-Schluessel besteht bereits und wird nicht erneut
+   angezeigt. Einen neuen anlegen: siehe CONNECT.md."
 fi
 
 cat <<EOF
@@ -666,9 +670,8 @@ cat <<EOF
 
 ${SETUP_HINT}
 
-   Das Skript verbindet den Ordner, legt docs/ an und schreibt eine
-   CLAUDE.md. Danach kann es geloescht werden — es enthaelt deinen
-   Schluessel. Er steht absichtlich nirgends auf diesem Schirm.
+   Der Schluessel steht absichtlich nirgends auf diesem Schirm. Was
+   nicht angezeigt wird, kann niemand versehentlich weitergeben.
 
  ── 2. Das Brain fuellen ────────────────────────────────────
 
