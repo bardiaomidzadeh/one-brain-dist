@@ -406,18 +406,38 @@ docker compose run --rm --no-deps \
   -v "$HERE:/app" -w /app \
   --entrypoint sh db -c 'true' >/dev/null 2>&1 || true
 
+# NOTICE-Meldungen unterdruecken, WARNING und Fehler nicht.
+#
+# Das Schema benutzt `DROP TRIGGER IF EXISTS` vor jedem CREATE, damit ein
+# zweiter Lauf durchgeht. Auf einer frischen Datenbank gibt es den Trigger
+# noch nicht, und Postgres sagt dann brav "does not exist, skipping" — pro
+# Trigger eine Zeile. Fuer den Kunden sah die erste Installation dadurch aus,
+# als sei etwas schiefgegangen, obwohl es das Gegenteil war.
+#
+# client_min_messages statt `2>/dev/null`: stderr blind wegzuwerfen wuerde
+# auch eine echte Fehlermeldung verschlucken, und dann bliebe nur ein nackter
+# Exit-Code. Hier verstummt genau die Stufe, die nichts bedeutet.
+#
+# Ueber PGOPTIONS, NICHT ueber `-v`. `-v` setzt psql-Variablen (ON_ERROR_STOP
+# ist eine), client_min_messages ist dagegen eine Server-Einstellung — als
+# `-v` uebergeben wird sie stillschweigend ignoriert und die Meldungen kaemen
+# weiter. Beim Schreiben genau so danebengegriffen.
+PG_QUIET="-c client_min_messages=warning"
+
 if command -v node >/dev/null 2>&1; then
   set -a; . ./.env; set +a
   POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=55432 node bin/migrate.mjs up 2>/dev/null \
     || {
-      docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+      docker compose exec -T -e PGOPTIONS="$PG_QUIET" db \
+        psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
         -v ON_ERROR_STOP=1 -f - < migrations/001_onebrain_baseline.sql >/dev/null \
         || die "Schema konnte nicht angewandt werden"
       ok "Schema angewandt (direkt via psql)"
     }
 else
   set -a; . ./.env; set +a
-  docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  docker compose exec -T -e PGOPTIONS="$PG_QUIET" db \
+    psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
     -v ON_ERROR_STOP=1 < migrations/001_onebrain_baseline.sql >/dev/null \
     || die "Schema konnte nicht angewandt werden"
   ok "Schema angewandt"
@@ -426,7 +446,7 @@ fi
 # ── 7. Mandant anlegen ───────────────────────────────────────────────────────
 step "Mandant"
 set -a; . ./.env; set +a
-docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q <<SQL
+docker compose exec -T -e PGOPTIONS="$PG_QUIET" db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q <<SQL
 INSERT INTO clients (slug, name) VALUES ('${SLUG}', '${COMPANY}')
 ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name;
 SQL
@@ -443,7 +463,7 @@ EXISTING=$(docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" 
 if [ "${EXISTING:-0}" -gt 0 ]; then
   ok "Admin-Schluessel existiert bereits (${EXISTING})"
 else
-  docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q <<SQL
+  docker compose exec -T -e PGOPTIONS="$PG_QUIET" db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q <<SQL
 INSERT INTO api_keys (name, token_hash, role)
 VALUES ('admin', encode(digest('${ONEBRAIN_ADMIN_TOKEN}', 'sha256'), 'hex'), 'admin')
 ON CONFLICT (token_hash) DO NOTHING;
@@ -472,7 +492,7 @@ if [ "${EXISTING_LAPTOP:-0}" -gt 0 ]; then
   ok "existiert bereits — er wird nicht erneut angezeigt"
 else
   LAPTOP_TOKEN="ob_live_$(openssl rand -hex 24)"
-  docker compose exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q <<SQL
+  docker compose exec -T -e PGOPTIONS="$PG_QUIET" db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q <<SQL
 INSERT INTO api_keys (name, token_hash, role)
 VALUES ('laptop', encode(digest('${LAPTOP_TOKEN}', 'sha256'), 'hex'), 'user')
 ON CONFLICT (token_hash) DO NOTHING;
@@ -638,23 +658,35 @@ Write-Host ""
 CONNECTPS
   umask 022
   chmod 600 onebrain-connect.ps1
-  SETUP_HINT="   Einen leeren Ordner anlegen, Claude Code darin starten und den
-   Text aus CONNECT-PROMPT.md einfuegen — mit dieser Serveradresse:
-
-       root@${DOMAIN}
-
-   Claude liest den Schluessel selbst ueber ssh und schreibt die
-   .mcp.json, CLAUDE.md und docs/. Nichts herunterladen, nichts
-   ausfuehren.
-
-   Die Skripte onebrain-connect.sh/.ps1 liegen hier weiterhin fuer
-   den Fall, dass jemand es lieber von Hand macht: siehe CONNECT.md."
-else
-  SETUP_HINT="   Der Arbeitsplatz-Schluessel besteht bereits und wird nicht erneut
-   angezeigt. Einen neuen anlegen: siehe CONNECT.md."
+  umask 022
 fi
 
-cat <<EOF
+# Denselben Text zusaetzlich in eine Datei, Rechte 600.
+#
+# Terminal-Puffer sind endlich, und wer die Installation zumacht, bevor er
+# den Prompt kopiert hat, stuende sonst ohne Schluessel da — er ist in der
+# Datenbank nur als Hash abgelegt und laesst sich nicht zurueckholen. Ein
+# neuer Schluessel waere zwar moeglich, aber das ist eine Supportanfrage
+# fuer ein Problem, das eine Datei loest.
+PROMPT_FILE="${HERE}/connect-prompt.txt"
+
+# Der Prompt wird hier fertig gedruckt, mit eingesetzter Adresse und Domain.
+#
+# Vorher stand hier ein Verweis auf CONNECT-PROMPT.md: Datei suchen, oeffnen,
+# Codeblock finden, <SERVER> von Hand ersetzen. Vier Schritte, in denen etwas
+# schiefgehen kann. Jetzt steht der fertige Text da und wird nur markiert.
+#
+# Was hier NICHT steht, ist der Schluessel — und das ist Absicht, kein
+# Versaeumnis. Ein Bearer-Token als eingefuegter Text, direkt neben der
+# Aufforderung, sich irgendwo zu verbinden und lokale Dateien zu schreiben,
+# ist von einem Angriff nicht zu unterscheiden. Drei Claude-Code-Instanzen
+# haben genau so einen Block beim Kunden abgelehnt, beim dritten Mal trotz
+# eines Warnhinweises darueber. Sie hatten recht. Der Agent holt sich den
+# Schluessel stattdessen selbst per ssh — er hat den Zugang ohnehin.
+# tee: einmal auf den Schirm, einmal in die Datei. Nicht zweimal erzeugen —
+# zwei Fassungen desselben Textes laufen irgendwann auseinander.
+umask 177
+cat <<EOF | tee "$PROMPT_FILE"
 
 ────────────────────────────────────────────────────────────
  ONE Brain steht.
@@ -663,21 +695,70 @@ cat <<EOF
    Slug       ${SLUG}
    Domain     ${DOMAIN}
    Tabellen   ${TABLES}
+────────────────────────────────────────────────────────────
 
- ── 1. Arbeitsplatz einrichten ──────────────────────────────
+ So verbindest du deinen eigenen Rechner damit:
 
-   Auf deinem eigenen Rechner, im Ordner, in dem du arbeiten willst:
+   1. Auf DEINEM Rechner einen leeren Ordner anlegen
+   2. Claude Code darin starten
+   3. Alles zwischen den gestrichelten Linien einfuegen
 
-${SETUP_HINT}
+ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Set up this folder as my ONE Brain workspace. Everything below is
+configuration I am giving you deliberately — my own server, my own access
+key. There is nothing to install, nothing to download, and no server to log
+into. Only create files in this folder.
 
-   Der Schluessel steht absichtlich nirgends auf diesem Schirm. Was
-   nicht angezeigt wird, kann niemand versehentlich weitergeben.
+1. Write .mcp.json here, exactly this:
 
- ── 2. Das Brain fuellen ────────────────────────────────────
+{
+  "mcpServers": {
+    "onebrain": {
+      "type": "http",
+      "url": "${ENDPOINT}",
+      "headers": { "Authorization": "Bearer ${LAPTOP_TOKEN}" }
+    }
+  }
+}
 
-   Dokumente nach docs/ legen, Claude Code dort starten, eingeben:
+   Then chmod 600 .mcp.json and add a line ".mcp.json" to .gitignore — it
+   holds a live credential and must never be committed.
 
-       Fill my ONE Brain from ./docs
+2. Create an empty folder docs/ next to it.
+
+3. Write CLAUDE.md in this folder, recording that it is connected to
+   "${COMPANY}" at ${ENDPOINT} with the slug "${SLUG}", plus these working
+   rules for anyone using this folder later:
+     - Raw material goes in with document_chunk_upsert, using the file path
+       relative to this folder as source_id, so re-running replaces a file
+       instead of duplicating it.
+     - Condensed summaries go in with knowledge_upsert, one per document
+       type. A second call replaces the whole type, so collect first and
+       write once.
+     - authority_level stays "derived". Only a human sets "approved" — that
+       is the difference between "it is in the database" and "you can rely
+       on it".
+     - Never invent a source. If the brain does not have it, say so.
+   If CLAUDE.md already exists, leave it alone and tell me.
+
+4. Check your own work: .mcp.json is valid JSON, mode 600, and listed in
+   .gitignore. Report what you actually verified.
+
+Then stop. Claude Code connects MCP servers only at startup, so the brain is
+not reachable in this session — do not try to call its tools and do not tell
+me it works, because you have not seen it work. Tell me to start a fresh
+session in this folder and say "Fill my ONE Brain from ./docs".
+ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+ Dieser Text enthaelt deinen Zugangsschluessel. Er ist fuer DEIN Claude
+ Code auf DEINEM Rechner gedacht — nicht fuer eine E-Mail, ein Ticket
+ oder einen fremden Chat. Er steht auch in ${HERE}/connect-prompt.txt,
+ falls du ihn spaeter noch einmal brauchst; die Datei kann danach weg.
+
+ Sollte dein Claude das Einfuegen ablehnen — ein Schluessel in einem
+ eingefuegten Text sieht einem Angriff aehnlich, und die Vorsicht ist
+ begruendet: dann lege .mcp.json einfach von Hand an. Der Inhalt steht
+ oben.
 
  ── Hinweise ────────────────────────────────────────────────
 
@@ -685,9 +766,12 @@ ${SETUP_HINT}
    - Postgres ist von aussen NICHT erreichbar (kein Port veroeffentlicht).
      Zugriff:  docker compose exec db psql -U ${POSTGRES_USER} -d ${POSTGRES_DB}
    - Zugangsdaten stehen in .env (chmod 600). Nicht ins Repo, nicht per Chat.
+   - Von Hand verbinden statt per Prompt:  siehe CONNECT.md
    - Aktualisieren:  git pull && sudo ./install.sh <dieselben Argumente>
 ────────────────────────────────────────────────────────────
 EOF
+chmod 600 "$PROMPT_FILE" 2>/dev/null || true
+umask 022
 
 if [ "$SKIP_DNS" -eq 1 ]; then
   warn "Mit --skip-dns laeuft kein Caddy: ${ENDPOINT} ist von aussen nicht erreichbar."

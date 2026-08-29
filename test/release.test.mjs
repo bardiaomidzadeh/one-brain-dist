@@ -200,35 +200,47 @@ test("die Vorlage fuer die CLAUDE.md ist vollstaendig und ohne Geheimnis", () =>
     rmSync(dir, { recursive: true, force: true });
   }
 });
-test("der Installer druckt keinen Schluessel auf den Schirm", () => {
-  // Dreimal hintereinander hat jemand den Einrichtungsblock in einen Chat
-  // kopiert — beim dritten Mal stand woertlich darueber "nicht in einen Chat
-  // einfuegen". Ein Warnhinweis ist keine Loesung: wer einen Block sieht,
-  // markiert ihn und fuegt ihn dort ein, wo er gerade arbeitet.
+test("der Schluessel-Prompt ist vollstaendig und die Kopie ist geschuetzt", () => {
+  // Bis 2026-08-29 hielt dieser Test das Gegenteil fest: der Schluessel durfte
+  // NICHT gedruckt werden, weil dreimal hintereinander jemand den Block in
+  // einen Chat kopiert hatte. Der Eigentuemer hat das bewusst umgedreht — der
+  // Prompt traegt den Schluessel jetzt, damit der Kunde nur einmal einfuegen
+  // muss und nichts per ssh geholt werden braucht.
   //
-  // Deshalb steht der Schluessel in einer Datei mit Rechten 600 und nirgends
-  // in der Ausgabe. Dieser Test haelt das fest — sonst wandert er beim
-  // naechsten Umbau der Schlussmeldung wieder auf den Schirm.
+  // Was dadurch NICHT wegfaellt: die Kopie auf der Platte muss 600 sein, der
+  // Prompt muss vollstaendig sein (ein halber Prompt ist schlimmer als
+  // keiner), und der Hinweis auf eine moegliche Ablehnung muss drinstehen —
+  // ein Schluessel in eingefuegtem Text sieht einem Angriff aehnlich, und
+  // genau das ist hier schon dreimal passiert.
   const { dir, tree } = release();
   try {
     const sh = readFileSync(path.join(tree, "install.sh"), "utf8");
 
-    // Der Block, der am Ende auf dem Schirm landet.
-    const m = new RegExp("cat <<EOF\\n([\\s\\S]*?)\\nEOF").exec(sh);
+    const m = new RegExp("cat <<EOF \\| tee \"\\$PROMPT_FILE\"\\n([\\s\\S]*?)\\nEOF").exec(sh);
     assert.ok(m, "Schlussblock in install.sh nicht gefunden — Test anpassen");
     const gedruckt = m[1];
 
-    assert.doesNotMatch(gedruckt, /LAPTOP_TOKEN/,
-      "der Schluessel wird gedruckt. Er gehoert in onebrain-connect.sh, nicht auf den Schirm.");
-    assert.doesNotMatch(gedruckt, /Bearer/,
-      "im Schlussblock steht ein Authorization-Header — der gehoert in die Datei.");
+    // Der Prompt muss den Schluessel und das Ziel wirklich enthalten. Fehlt
+    // eins davon, kann der Kunde die Verbindung nicht herstellen.
+    assert.match(gedruckt, /Bearer \$\{LAPTOP_TOKEN\}/,
+      "im Prompt fehlt der Schluessel — dann nuetzt er dem Kunden nichts");
+    assert.match(gedruckt, /\$\{ENDPOINT\}/,
+      "im Prompt fehlt die Adresse des Servers");
+    assert.match(gedruckt, /\.mcp\.json/,
+      "der Prompt sagt nicht, welche Datei entstehen soll");
+    assert.match(gedruckt, /chmod 600 \.mcp\.json/,
+      "der Prompt laesst die Datei mit dem Schluessel ungeschuetzt");
+    assert.match(gedruckt, /gitignore/,
+      "der Prompt sichert nicht gegen ein versehentliches Commit");
 
-    // Gegenprobe: der Block muss ueberhaupt etwas Sinnvolles enthalten,
-    // sonst bestuenden die beiden Pruefungen auch bei einer leeren Ausgabe.
-    // Gegenprobe mit einem String, der WIRKLICH im Block steht: der Dateiname
-    // kommt ueber ${SETUP_HINT} hinein, steht also nicht woertlich dort.
-    assert.match(gedruckt, /Arbeitsplatz einrichten/,
-      "der Schlussblock sieht leer aus — dann bewiesen die Pruefungen oben nichts");
+    // Die Kopie auf der Platte darf nicht fuer alle lesbar sein.
+    assert.match(sh, /chmod 600 "\$PROMPT_FILE"/,
+      "connect-prompt.txt bleibt ohne 600 — der Schluessel waere fuer jeden Nutzer lesbar");
+
+    // Und der Ausweg, falls das Einfuegen abgelehnt wird. Ohne ihn endet der
+    // Kunde in einer Sackgasse, die wir vorhersehen koennen.
+    assert.match(gedruckt, /ablehnen/,
+      "kein Hinweis, was zu tun ist, wenn Claude den Prompt ablehnt");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -261,7 +273,7 @@ test("der Installer liefert beide Einrichtungswege", () => {
     //
     // Die beiden Skripte bleiben im Release (Zeilen oben) und bleiben damit
     // gegen die PowerShell-Falle geprueft; sie sind jetzt der Weg von Hand.
-    assert.match(sh, /CONNECT-PROMPT\.md/,
+    assert.match(sh, /Alles zwischen den gestrichelten Linien einfuegen/,
       "der Prompt-Weg wird dem Kunden nicht genannt");
     assert.doesNotMatch(sh.slice(sh.indexOf("ONE Brain steht")), /scp /,
       "der Schlussblock schickt den Kunden wieder auf den scp-Weg");

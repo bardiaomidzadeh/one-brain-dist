@@ -100,15 +100,17 @@ reply to your invitation email.
 
 ### Step 3 — connect your own computer
 
-Back on your own machine, not the server. Make a folder to work in, start
-Claude Code there, and paste the prompt from
-[`CONNECT-PROMPT.md`](CONNECT-PROMPT.md), replacing `<SERVER>` with your
-server's address.
+The installer ends by printing a prompt, with your server address and domain
+already filled in. Nothing to edit.
 
-It fetches the access key itself, writes a `.mcp.json` so this folder can
-reach your brain, creates `docs/`, and writes a `CLAUDE.md`. The key is
-never displayed — what is not shown cannot be pasted somewhere it should
-not go.
+Back on your own machine, not the server: make an empty folder, start Claude
+Code in it, and paste that block.
+
+Claude connects over SSH, fetches the access key itself, writes a
+`.mcp.json` so this folder can reach your brain, creates `docs/`, and writes
+a `CLAUDE.md`. The key is never displayed — not on the server's screen, not
+in the prompt, not in the chat. What is not shown cannot be pasted somewhere
+it should not go.
 
 Then **start a new Claude Code session** in that folder — connections are
 made at startup, so the session that set it up cannot use it yet — and say:
